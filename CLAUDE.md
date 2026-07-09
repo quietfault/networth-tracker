@@ -1,0 +1,224 @@
+# Net Worth Tracker — проектный файл для Claude Code
+
+## Что это
+
+Персональный трекер состояния. Замена ручного Excel-файла, который ведётся с 2017 года.
+Раз в месяц пользователь делает срез по всем активам → видит динамику cash и networth на графиках.
+
+**Целевой пользователь:** человек с нестандартным портфелем — крипто (CEX + self-custody), банки, физические активы, товарный инвентарь.
+
+---
+
+## Стек
+
+- **Frontend:** React + Vite + TypeScript
+- **Хранение и авторизация:** Supabase (Postgres + Auth, email/password). Решено осознанно — данные привязаны к аккаунту через RLS (`user_id = auth.uid()`), доступны с любого устройства после логина. Схема и политики: [supabase/schema.sql](supabase/schema.sql)
+- **Деплой:** GitHub Pages (или Netlify drag-and-drop) для начала, далее свой сервер, видимо, где всё будет храниться
+- **Внешние API (read-only, без ключей пользователя по умолчанию):**
+  - CoinGecko API — курсы токенов (бесплатно, без ключа)
+  - Etherscan API V2 — балансы адресов на Ethereum + топ EVM-сетях, один ключ на все (нужен бесплатный ключ)
+  - Blockchair API — баланс BTC-адресов (бесплатно, лимит ~30 req/day)
+  - Solana public RPC (publicnode.com) — баланс SOL, без ключа
+  - UniSat Open API — баланс Рун на BTC-адресах, нужен бесплатный ключ (экспериментально, см. ниже)
+
+---
+
+## Архитектура данных
+
+### Снимок (Snapshot) — основная единица
+```js
+{
+  id: "2024-12",           // год-месяц
+  date: "2024-12-01",
+  assets: {
+    banks: [
+      { name: "Сбер", amount: 150000, currency: "RUB" },
+      { name: "Тинькофф", amount: 3200, currency: "USD" }
+    ],
+    crypto: [
+      {
+        type: "wallet",            // "wallet" | "cex"
+        label: "MetaMask main",
+        address: "0xABC...",       // для wallet — адрес для авто-подтяжки
+        chain: "ethereum",         // ethereum | bitcoin | solana
+        tokens: [
+          { symbol: "ETH", amount: 1.5, priceUSD: null }  // price подтягивается
+        ]
+      },
+      {
+        type: "cex",
+        label: "Binance",
+        tokens: [
+          { symbol: "BTC", amount: 0.12, priceUSD: null },
+          { symbol: "USDT", amount: 2000, priceUSD: 1 }
+        ]
+      }
+    ],
+    inventory: [
+      { name: "Nike Dunk Low Panda", qty: 2, pricePerUnit: 12000, currency: "RUB" }
+    ],
+    physical: [
+      { name: "Машиноместо Москва", value: 1200000, currency: "RUB" },
+      { name: "Асик Antminer S19", value: 800, currency: "USD" }
+    ]
+  },
+  meta: {
+    usdRub: 92.5,           // курс на момент снимка (вводится вручную)
+    totalUSD: null,         // считается автоматически
+    createdAt: "2024-12-01T10:00:00Z"
+  }
+}
+```
+
+Структура выше — концептуальная модель. Физически в Supabase три таблицы (`user_id` + RLS в каждой):
+
+- `snapshots` — `period` (уникален с `user_id`), `snapshot_date`, `assets` (jsonb — вложенная структура banks/crypto/inventory/physical как выше), `usd_rub`, `total_usd`
+- `wallets` — сохранённые адреса кошельков (`label`, `chain`, `address`), чтобы не вводить каждый раз
+- `settings` — `base_currency`, `etherscan_api_key`, `unisat_api_key`
+
+TypeScript-типы: [src/types/snapshot.ts](src/types/snapshot.ts). CRUD: [src/lib/snapshots.ts](src/lib/snapshots.ts), [src/lib/wallets.ts](src/lib/wallets.ts), [src/lib/settings.ts](src/lib/settings.ts).
+
+---
+
+## Структура страниц / роутинг
+
+```
+/ (Dashboard)
+  — последний снимок: итоговая сумма networth
+  — график networth по месяцам (line chart)
+  — разбивка по категориям (pie или bar)
+
+/snapshot/new
+  — форма создания нового снимка
+  — по категориям: банки / крипто / инвентарь / физические активы
+  — кнопка "Обновить балансы" — дёргает API для кошельков
+
+/snapshot/:id
+  — просмотр конкретного снимка
+
+/wallets
+  — управление кошельками (добавить адрес, выбрать сеть, дать label)
+
+/settings
+  — API ключи (Etherscan, UniSat), базовая валюта
+```
+
+---
+
+## Ключевые UX-решения
+
+1. **Кошельки вводятся один раз** — сохраняются в таблице `wallets`, при новом снимке автоматически появляются строками в разделе "Крипта"
+2. **Курсы токенов обновляются при открытии формы** — через CoinGecko, без действий пользователя
+3. **Все суммы конвертируются в USD** для единого networth. Курс USD/RUB вводится вручную, поддерживаются только RUB и USD как валюты банков/инвентаря/физики
+4. **Снимок = иммутабельная запись** — нельзя редактировать прошлое, только добавлять новое (нет update-функции в data layer)
+5. **Банки/инвентарь/физика/CEX предзаполняются из предыдущего снимка** — те же строки, меняются только суммы
+6. **Экспорт в JSON** — на случай переезда или бэкапа. *Пока не реализовано.*
+
+---
+
+## API-интеграции
+
+### CoinGecko (без ключа)
+```js
+// Курс токена
+GET https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd
+
+// Маппинг symbol → coingecko id (держать локально для популярных)
+const COIN_IDS = {
+  ETH: 'ethereum',
+  BTC: 'bitcoin',
+  SOL: 'solana',
+  BNB: 'binancecoin',
+  USDT: 'tether',
+  USDC: 'usd-coin',
+  // ...дополнять по мере надобности
+}
+```
+
+### Etherscan V2 — мультичейн (нужен бесплатный API ключ)
+```js
+// Один и тот же адрес — один и тот же аккаунт на всех EVM-сетях.
+// Баланс проверяется по списку chainId, возвращаются только сети с ненулевым балансом.
+GET https://api.etherscan.io/v2/api?chainid={CHAIN_ID}&module=account&action=balance&address={ADDRESS}&tag=latest&apikey={KEY}
+
+// Проверяемые сети (src/lib/api/etherscan.ts, EVM_CHAINS):
+// 1 Ethereum, 56 BNB Chain, 137 Polygon, 42161 Arbitrum One,
+// 10 Optimism, 8453 Base, 43114 Avalanche
+```
+
+### Blockchair (без ключа, лимиты ~30 req/day)
+```js
+// Баланс BTC-адреса
+GET https://api.blockchair.com/bitcoin/dashboards/address/{ADDRESS}
+// → data[ADDRESS].address.balance (в сатоши, делить на 1e8)
+// При превышении лимита возвращает HTTP 430 с полем context.error — показываем как есть
+```
+
+### Solana public RPC (без ключа)
+```js
+// Официальный api.mainnet-beta.solana.com блокирует браузерные запросы (403,
+// CORS). Используем зеркало publicnode.com, у которого есть Access-Control-Allow-Origin: *.
+POST https://solana-rpc.publicnode.com
+{ "jsonrpc": "2.0", "id": 1, "method": "getBalance", "params": ["{ADDRESS}"] }
+// → result.value в лампортах, делить на 1e9
+```
+
+### UniSat Open API — баланс Рун на BTC
+```js
+GET https://open-api.unisat.io/v1/indexer/address/{ADDRESS}/runes/balance-list
+Authorization: Bearer {KEY}
+// → { code: 0, data: { detail: [{ rune, spacedRune, amount, divisibility, symbol, runeid }] } }
+// amount — строка в минимальных единицах, делить на 10^divisibility
+// symbol — декоративный глиф (¤, ⧉), для отображения использовать spacedRune
+```
+Бесплатный ключ — регистрация на developer.unisat.io. Проверено вживую с реальным
+ключом 2026-07-09: CORS открыт (`Access-Control-Allow-Origin: *`), работает из браузера.
+В [src/lib/api/wallets.tsx](src/pages/Wallets.tsx) BTC-нативный баланс (Blockchair) и Руны
+(UniSat) запрашиваются независимо — если один источник падает (например, Blockchair
+по лимиту), второй всё равно отображается.
+
+---
+
+## Текущий статус
+
+Готово: scaffold, Supabase-схема + RLS, auth (email/password), типы и data layer,
+`/wallets` (мультичейн EVM + Solana + Runes-балансы), `/snapshot/new` (полная форма
+с предзаполнением, "Обновить балансы", live-расчёт итога), `/settings` (API-ключи),
+Dashboard (line chart networth + pie разбивка по категориям).
+
+Не сделано:
+- `/snapshot/:id` — сейчас заглушка, не показывает реальные данные снимка
+- Экспорт в JSON
+- Деплой на GitHub Pages
+
+---
+
+## Важные ограничения
+
+- **Данные видны только после логина** — RLS на всех таблицах (`user_id = auth.uid()`), плюс явные `GRANT` только для роли `authenticated` (анонимная роль не имеет доступа к таблицам вообще, не только на уровне строк)
+- **Не хранить приватные ключи** — только публичные адреса для чтения балансов
+- **Etherscan/UniSat ключи пользователя — в таблице `settings`**, не в коде, не в `.env`. Supabase anon key — в `.env` (это ожидаемо и безопасно для Supabase, доступ реально ограничивает RLS)
+- Поддержка мобильного браузера желательна, но не приоритет
+
+---
+
+## Контекст пользователя
+
+- Кошельки: self-custody (Ethereum-совместимые + возможно BTC/Solana) + CEX (Binance/Bybit)
+- Инвентарь: был товар (кроссовки), сейчас неактуально — но структура нужна
+- Физические активы: машиноместа, майнинг-оборудование
+- Банки: RUB и USD счета
+- Ведёт учёт с 2017, данные из Excel нужно будет импортировать вручную (не автоматически)
+- Опыт: пишет логику с AI-помощью, деплой через GitHub Pages уже умеет (есть другой проект)
+- Стек знаком: React + Vite + GitHub Pages
+
+---
+
+## Как запустить локально
+
+```bash
+npm install
+# .env нужен VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY (см. .env.example),
+# схема БД — supabase/schema.sql, выполнить в Supabase SQL Editor
+npm run dev
+```
