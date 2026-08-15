@@ -13,7 +13,7 @@
 
 - **Frontend:** React + Vite + TypeScript
 - **Хранение и авторизация:** Supabase (Postgres + Auth, email/password). Решено осознанно — данные привязаны к аккаунту через RLS (`user_id = auth.uid()`), доступны с любого устройства после логина. Схема и политики: [supabase/schema.sql](supabase/schema.sql)
-- **Деплой:** GitHub Pages (или Netlify drag-and-drop) для начала, далее свой сервер, видимо, где всё будет храниться
+- **Деплой:** GitHub Pages, автоматически через GitHub Actions при пуше в `main` ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)). `base: '/networth-tracker/'` в `vite.config.ts`, роутинг — HashRouter
 - **Внешние API (read-only, без ключей пользователя по умолчанию):**
   - CoinGecko API — курсы токенов (бесплатно, без ключа)
   - Etherscan API V2 — балансы адресов на Ethereum + топ EVM-сетях, один ключ на все (нужен бесплатный ключ)
@@ -173,7 +173,7 @@ Authorization: Bearer {KEY}
 ```
 Бесплатный ключ — регистрация на developer.unisat.io. Проверено вживую с реальным
 ключом 2026-07-09: CORS открыт (`Access-Control-Allow-Origin: *`), работает из браузера.
-В [src/lib/api/wallets.tsx](src/pages/Wallets.tsx) BTC-нативный баланс (Blockchair) и Руны
+В [src/pages/Wallets.tsx](src/pages/Wallets.tsx) BTC-нативный баланс (Blockchair) и Руны
 (UniSat) запрашиваются независимо — если один источник падает (например, Blockchair
 по лимиту), второй всё равно отображается.
 
