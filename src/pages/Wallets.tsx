@@ -1,25 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { addWallet, deleteWallet, listWallets } from '../lib/wallets'
 import { getSettings } from '../lib/settings'
-import { fetchEvmBalances } from '../lib/api/etherscan'
-import { fetchBtcBalance } from '../lib/api/blockchair'
-import { fetchSolBalance } from '../lib/api/solana'
-import { fetchRuneBalances } from '../lib/api/unisat'
-import { fetchTokenPrices } from '../lib/api/coingecko'
+import { applyPrices, fetchPrices, fetchWalletAssets, type ApiKeys, type WalletAsset } from '../lib/walletAssets'
+import { formatAmount, formatUsd } from '../lib/format'
 import { getErrorMessage } from '../lib/errors'
 import type { Chain, Wallet } from '../types/snapshot'
 
-interface BalanceEntry {
-  label: string
-  amount: number | null
-  usd: number | null
-  error?: string
-}
-
 interface BalanceState {
   loading: boolean
+  /** Set only when nothing could be loaded at all. */
   error: string | null
-  entries: BalanceEntry[]
+  assets: WalletAsset[]
+  /** Sources that failed while others succeeded (rate limits, missing keys). */
+  warnings: string[]
 }
 
 const CHAIN_LABELS: Record<Chain, string> = {
@@ -27,8 +20,6 @@ const CHAIN_LABELS: Record<Chain, string> = {
   bitcoin: 'Bitcoin',
   solana: 'Solana',
 }
-
-const PRICED_SYMBOLS = ['ETH', 'BTC', 'SOL', 'BNB', 'MATIC', 'AVAX']
 
 export function Wallets() {
   const [wallets, setWallets] = useState<Wallet[]>([])
@@ -40,9 +31,7 @@ export function Wallets() {
   const [address, setAddress] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const [etherscanKey, setEtherscanKey] = useState<string | null>(null)
-  const [unisatKey, setUnisatKey] = useState<string | null>(null)
-  const [prices, setPrices] = useState<Record<string, number>>({})
+  const [keys, setKeys] = useState<ApiKeys>({ etherscan: null, unisat: null })
   const [balances, setBalances] = useState<Record<string, BalanceState>>({})
   const fetchedIds = useRef(new Set<string>())
 
@@ -54,15 +43,12 @@ export function Wallets() {
     setLoading(true)
     setError(null)
     try {
-      const [w, settings, priceMap] = await Promise.all([
-        listWallets(),
-        getSettings(),
-        fetchTokenPrices(PRICED_SYMBOLS),
-      ])
+      const [w, settings] = await Promise.all([listWallets(), getSettings()])
       setWallets(w)
-      setEtherscanKey(settings?.etherscanApiKey ?? null)
-      setUnisatKey(settings?.unisatApiKey ?? null)
-      setPrices(priceMap)
+      setKeys({
+        etherscan: settings?.etherscanApiKey ?? null,
+        unisat: settings?.unisatApiKey ?? null,
+      })
     } catch (e) {
       setError(getErrorMessage(e))
     } finally {
@@ -81,45 +67,26 @@ export function Wallets() {
   }, [wallets, loading])
 
   async function loadBalance(w: Wallet) {
-    setBalances((prev) => ({ ...prev, [w.id]: { loading: true, error: null, entries: [] } }))
+    setBalances((prev) => ({
+      ...prev,
+      [w.id]: { loading: true, error: null, assets: [], warnings: [] },
+    }))
     try {
-      let entries: BalanceEntry[] = []
-
-      if (w.chain === 'ethereum') {
-        const chains = await fetchEvmBalances(w.address, etherscanKey ?? '')
-        entries = chains.map((c) => ({
-          label: `${c.symbol} (${c.chainName})`,
-          amount: c.amount,
-          usd: prices[c.symbol] ? c.amount * prices[c.symbol] : null,
-        }))
-      } else if (w.chain === 'bitcoin') {
-        // BTC-native and Runes come from independent APIs; one failing
-        // (e.g. Blockchair's daily rate limit) shouldn't hide the other.
-        try {
-          const btc = await fetchBtcBalance(w.address)
-          entries.push({ label: 'BTC', amount: btc, usd: prices.BTC ? btc * prices.BTC : null })
-        } catch (e) {
-          entries.push({ label: 'BTC', amount: null, usd: null, error: getErrorMessage(e) })
-        }
-
-        if (unisatKey) {
-          try {
-            const runes = await fetchRuneBalances(w.address, unisatKey)
-            entries.push(...runes.map((r) => ({ label: r.symbol, amount: r.amount, usd: null })))
-          } catch (e) {
-            entries.push({ label: 'Runes', amount: null, usd: null, error: getErrorMessage(e) })
-          }
-        }
-      } else {
-        const sol = await fetchSolBalance(w.address)
-        entries.push({ label: 'SOL', amount: sol, usd: prices.SOL ? sol * prices.SOL : null })
-      }
-
-      setBalances((prev) => ({ ...prev, [w.id]: { loading: false, error: null, entries } }))
+      const { assets, errors } = await fetchWalletAssets(w, keys)
+      const { prices, errors: priceErrors } = await fetchPrices(assets)
+      setBalances((prev) => ({
+        ...prev,
+        [w.id]: {
+          loading: false,
+          error: null,
+          assets: applyPrices(assets, prices),
+          warnings: [...errors, ...priceErrors],
+        },
+      }))
     } catch (e) {
       setBalances((prev) => ({
         ...prev,
-        [w.id]: { loading: false, error: getErrorMessage(e), entries: [] },
+        [w.id]: { loading: false, error: getErrorMessage(e), assets: [], warnings: [] },
       }))
     }
   }
@@ -192,30 +159,25 @@ export function Wallets() {
                 <td style={{ verticalAlign: 'top' }}>{CHAIN_LABELS[w.chain]}</td>
                 <td style={{ fontFamily: 'monospace', fontSize: 12, verticalAlign: 'top' }}>{w.address}</td>
                 <td style={{ verticalAlign: 'top' }}>
-                  {b?.loading ? (
-                    'Загрузка...'
-                  ) : b?.error ? (
-                    <span style={{ color: 'crimson' }}>{b.error}</span>
-                  ) : b && b.entries.length > 0 ? (
-                    <div>
-                      {b.entries.map((entry, i) => (
-                        <div key={i}>
-                          {entry.error ? (
-                            <span style={{ color: 'crimson' }}>
-                              {entry.label}: {entry.error}
-                            </span>
-                          ) : (
-                            <>
-                              {entry.amount} {entry.label}
-                              {entry.usd != null && ` (~$${entry.usd.toFixed(2)})`}
-                            </>
-                          )}
-                        </div>
-                      ))}
+                  {b?.loading && 'Загрузка...'}
+                  {b?.error && <div style={{ color: 'crimson' }}>{b.error}</div>}
+                  {b?.assets.map((asset, i) => (
+                    <div key={i}>
+                      {formatAmount(asset.amount)} {asset.symbol}
+                      {asset.priceUSD != null && ` (~${formatUsd(asset.amount * asset.priceUSD)})`}
+                      {asset.note && asset.note !== asset.symbol && (
+                        <span style={{ opacity: 0.5, fontSize: 12 }}> · {asset.note}</span>
+                      )}
                     </div>
-                  ) : b ? (
+                  ))}
+                  {b && !b.loading && !b.error && b.assets.length === 0 && b.warnings.length === 0 && (
                     <span style={{ opacity: 0.6 }}>нет средств</span>
-                  ) : null}
+                  )}
+                  {b?.warnings.map((warning, i) => (
+                    <div key={i} style={{ color: 'goldenrod', fontSize: 12 }}>
+                      {warning}
+                    </div>
+                  ))}
                 </td>
                 <td style={{ verticalAlign: 'top' }}>
                   <button onClick={() => loadBalance(w)}>Обновить</button>

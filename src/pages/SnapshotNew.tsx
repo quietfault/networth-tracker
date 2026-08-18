@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { listWallets } from '../lib/wallets'
 import { listSnapshots, createSnapshot } from '../lib/snapshots'
 import { getSettings } from '../lib/settings'
-import { fetchEvmBalances } from '../lib/api/etherscan'
-import { fetchBtcBalance } from '../lib/api/blockchair'
-import { fetchSolBalance } from '../lib/api/solana'
-import { fetchRuneBalances } from '../lib/api/unisat'
-import { fetchTokenPrices } from '../lib/api/coingecko'
+import {
+  applyPrices,
+  fetchPrices,
+  fetchWalletAssets,
+  type ApiKeys,
+  mergeBySymbol,
+  type WalletAsset,
+} from '../lib/walletAssets'
 import { getErrorMessage } from '../lib/errors'
 import { categoryTotals } from '../lib/valuation'
 import { emptyAssets } from '../types/snapshot'
@@ -25,8 +28,7 @@ export function SnapshotNew() {
   const [usdRub, setUsdRub] = useState<string>('')
   const [assets, setAssets] = useState<SnapshotAssets>(emptyAssets())
 
-  const [etherscanKey, setEtherscanKey] = useState<string | null>(null)
-  const [unisatKey, setUnisatKey] = useState<string | null>(null)
+  const [keys, setKeys] = useState<ApiKeys>({ etherscan: null, unisat: null })
 
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -47,8 +49,10 @@ export function SnapshotNew() {
         listSnapshots(),
         getSettings(),
       ])
-      setEtherscanKey(settings?.etherscanApiKey ?? null)
-      setUnisatKey(settings?.unisatApiKey ?? null)
+      setKeys({
+        etherscan: settings?.etherscanApiKey ?? null,
+        unisat: settings?.unisatApiKey ?? null,
+      })
 
       const previous = snapshots[snapshots.length - 1]
 
@@ -85,51 +89,44 @@ export function SnapshotNew() {
     setRefreshErrors([])
     const errors: string[] = []
 
-    const updatedCrypto = await Promise.all(
-      assets.crypto.map(async (holding) => {
-        if (holding.type !== 'wallet') return holding
-        try {
-          const tokens: Token[] = []
-
-          if (holding.chain === 'ethereum') {
-            const chains = await fetchEvmBalances(holding.address!, etherscanKey ?? '')
-            const bySymbol = new Map<string, number>()
-            for (const c of chains) bySymbol.set(c.symbol, (bySymbol.get(c.symbol) ?? 0) + c.amount)
-            for (const [symbol, amount] of bySymbol) tokens.push({ symbol, amount, priceUSD: null })
-          } else if (holding.chain === 'bitcoin') {
-            const btc = await fetchBtcBalance(holding.address!)
-            tokens.push({ symbol: 'BTC', amount: btc, priceUSD: null })
-            if (unisatKey) {
-              const runes = await fetchRuneBalances(holding.address!, unisatKey)
-              for (const r of runes) tokens.push({ symbol: r.symbol, amount: r.amount, priceUSD: null })
-            }
-          } else if (holding.chain === 'solana') {
-            const sol = await fetchSolBalance(holding.address!)
-            tokens.push({ symbol: 'SOL', amount: sol, priceUSD: null })
-          }
-
-          return { ...holding, tokens }
-        } catch (e) {
-          errors.push(`${holding.label}: ${getErrorMessage(e)}`)
-          return holding
-        }
-      }),
-    )
-
-    const allSymbols = updatedCrypto.flatMap((h) => h.tokens.map((t) => t.symbol))
-    let prices: Record<string, number> = {}
-    try {
-      prices = await fetchTokenPrices(allSymbols)
-    } catch (e) {
-      errors.push(`CoinGecko: ${getErrorMessage(e)}`)
+    // Sequential on purpose: Etherscan's free tier counts calls per second
+    // across the whole key, so parallel wallets would rate-limit each other.
+    const fetched: (WalletAsset[] | null)[] = []
+    for (const holding of assets.crypto) {
+      if (holding.type !== 'wallet' || !holding.address || !holding.chain) {
+        fetched.push(null)
+        continue
+      }
+      try {
+        const result = await fetchWalletAssets(
+          { chain: holding.chain, address: holding.address },
+          keys,
+        )
+        errors.push(...result.errors.map((message) => `${holding.label}: ${message}`))
+        fetched.push(result.assets)
+      } catch (e) {
+        errors.push(`${holding.label}: ${getErrorMessage(e)}`)
+        fetched.push(null)
+      }
     }
 
-    const pricedCrypto = updatedCrypto.map((holding) => ({
-      ...holding,
-      tokens: holding.tokens.map((t) => ({ ...t, priceUSD: prices[t.symbol] ?? t.priceUSD })),
-    }))
+    const { prices, errors: priceErrors } = await fetchPrices(fetched.flatMap((a) => a ?? []))
+    errors.push(...priceErrors)
 
-    setAssets((prev) => ({ ...prev, crypto: pricedCrypto }))
+    const updatedCrypto = assets.crypto.map((holding, i) => {
+      const walletAssets = fetched[i]
+      if (!walletAssets) return holding
+      return {
+        ...holding,
+        tokens: mergeBySymbol(applyPrices(walletAssets, prices)).map<Token>((a) => ({
+          symbol: a.symbol,
+          amount: a.amount,
+          priceUSD: a.priceUSD,
+        })),
+      }
+    })
+
+    setAssets((prev) => ({ ...prev, crypto: updatedCrypto }))
     setRefreshErrors(errors)
     setRefreshing(false)
   }

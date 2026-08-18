@@ -18,7 +18,7 @@
   - CoinGecko API — курсы токенов (бесплатно, без ключа)
   - Etherscan API V2 — балансы адресов на Ethereum + топ EVM-сетях, один ключ на все (нужен бесплатный ключ)
   - Blockchair API — баланс BTC-адресов (бесплатно, лимит ~30 req/day)
-  - Solana public RPC (publicnode.com) — баланс SOL, без ключа
+  - Solana public RPC (publicnode.com) — баланс SOL и SPL-токенов, без ключа
   - UniSat Open API — баланс Рун на BTC-адресах, нужен бесплатный ключ (экспериментально, см. ниже)
 
 ---
@@ -145,6 +145,17 @@ GET https://api.etherscan.io/v2/api?chainid={CHAIN_ID}&module=account&action=bal
 // 1 Ethereum, 56 BNB Chain, 137 Polygon, 42161 Arbitrum One,
 // 10 Optimism, 8453 Base, 43114 Avalanche
 ```
+Бесплатный тариф — 5 запросов в секунду на ключ. Семь сетей параллельно
+(`Promise.all`) в этот лимит не влезали, и весь кошелёк падал с невнятным
+«NOTOK». Поэтому сети опрашиваются последовательно с паузой 250 мс, лимитные
+ответы ретраятся, а сеть, которая всё-таки не ответила, попадает в
+`errors[]` — остальные балансы при этом показываются.
+Ошибку V2 отдаёт тремя разными способами (`status:"0"` + `result` с текстом,
+`error.message`, HTTP-код), полезный текст обычно в `result`.
+
+**Не подтягивается:** ERC-20 токены на EVM-сетях — только нативная монета.
+Список токенов на адресе в Etherscan V2 — платный (Pro) эндпоинт; бесплатная
+альтернатива (Blockscout) не проверена. Токены на EVM вносятся руками.
 
 ### Blockchair (без ключа, лимиты ~30 req/day)
 ```js
@@ -161,11 +172,25 @@ GET https://api.blockchair.com/bitcoin/dashboards/address/{ADDRESS}
 POST https://solana-rpc.publicnode.com
 { "jsonrpc": "2.0", "id": 1, "method": "getBalance", "params": ["{ADDRESS}"] }
 // → result.value в лампортах, делить на 1e9
+
+// SPL-токены — тем же RPC, по двум программам сразу: старый SPL Token
+// (Tokenkeg...) и Token-2022 (Tokenz...). Новые монеты живут во второй,
+// поэтому одной программы мало.
+{ "method": "getTokenAccountsByOwner",
+  "params": ["{ADDRESS}", { "programId": "{PROGRAM}" }, { "encoding": "jsonParsed" }] }
+// → result.value[].account.data.parsed.info.tokenAmount.uiAmountString
+// Отбрасываются нулевые аккаунты и NFT (decimals = 0), несколько аккаунтов
+// одного минта суммируются.
 ```
+RPC отдаёт минты, а не тикеры. Популярные минты подписаны локальной картой
+(`MINT_SYMBOLS` в [src/lib/api/solana.ts](src/lib/api/solana.ts)), остальные
+показываются как `EPjF…TDt1v` — символ можно поправить руками в форме снимка.
+Цена таких токенов берётся по адресу минта:
+`GET /api/v3/simple/token_price/solana?contract_addresses={MINT}&vs_currencies=usd`
 
 ### UniSat Open API — баланс Рун на BTC
 ```js
-GET https://open-api.unisat.io/v1/indexer/address/{ADDRESS}/runes/balance-list
+GET https://open-api.unisat.io/v1/indexer/address/{ADDRESS}/runes/balance-list?start=0&limit=100
 Authorization: Bearer {KEY}
 // → { code: 0, data: { detail: [{ rune, spacedRune, amount, divisibility, symbol, runeid }] } }
 // amount — строка в минимальных единицах, делить на 10^divisibility
@@ -173,9 +198,18 @@ Authorization: Bearer {KEY}
 ```
 Бесплатный ключ — регистрация на developer.unisat.io. Проверено вживую с реальным
 ключом 2026-07-09: CORS открыт (`Access-Control-Allow-Origin: *`), работает из браузера.
-В [src/pages/Wallets.tsx](src/pages/Wallets.tsx) BTC-нативный баланс (Blockchair) и Руны
-(UniSat) запрашиваются независимо — если один источник падает (например, Blockchair
-по лимиту), второй всё равно отображается.
+`start`/`limit` передаются явно — без диапазона индексатор в некоторых
+деплоях отдаёт пустой список. Если ключ не задан, это теперь видно строкой
+«UniSat API key не задан», а не молча пропущенным разделом.
+
+### Общий слой: [src/lib/walletAssets.ts](src/lib/walletAssets.ts)
+`/wallets` и форма снимка ходят за балансами одной функцией
+`fetchWalletAssets(wallet, keys)`. Правило одно на все сети: **каждый источник
+запрашивается независимо и падает независимо**. Результат — `{ assets, errors }`,
+где `errors` — частичные отказы (лимит Blockchair, отсутствующий ключ, мёртвая
+EVM-сеть), которые показываются рядом с теми балансами, что загрузились.
+Цены докладываются одним проходом: известные тикеры — по `COIN_IDS`,
+остальное — по адресу контракта/минта.
 
 ---
 
