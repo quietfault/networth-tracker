@@ -1,10 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Net Worth Tracker</title>
+
+    <title>Срез · quietfault</title>
+    <meta name="description" content="Личный трекер состояния: раз в месяц срез по банкам, крипте и физическим активам, дальше — динамика в одном месте." />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Стартовое значение = токен --bg тёмной темы; дальше его держит
+         актуальным setTheme() в src/lib/theme.ts, читая цвет из токенов. -->
+    <meta name="theme-color" content="#0d1117" />
+
+    <!-- Тема применяется до первой отрисовки, иначе на светлой теме
+         мигает тёмный фон. Тёмная — по умолчанию, атрибут ей не нужен. -->
+    <script>
+      try {
+        var saved = localStorage.getItem('qf-theme')
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved)
+        }
+      } catch (e) {
+        /* приватный режим — остаётся тема по умолчанию */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

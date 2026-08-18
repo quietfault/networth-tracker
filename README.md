@@ -1,6 +1,6 @@
-# Net Worth Tracker
+# Срез
 
-Персональный трекер состояния. Раз в месяц делается срез по всем активам —
+Персональный трекер состояния quietfault. Раз в месяц делается срез по всем активам —
 банки, крипта (кошельки и биржи), товарный инвентарь, физические активы — и
 приложение показывает динамику на графиках.
 
@@ -18,8 +18,14 @@
 React 19 + Vite (TypeScript) · Supabase (Postgres + Auth) · react-router-dom
 (HashRouter) · recharts · oxlint · деплой на GitHub Pages через GitHub Actions.
 
-Внешние API, все read-only: CoinGecko (курсы), Etherscan V2 (балансы на 7
-EVM-сетях), Blockchair (BTC), Solana public RPC (SOL), UniSat (Руны на BTC).
+Оформление — по брендбуку quietfault: тёмная тема по умолчанию, светлая
+переключателем, шрифты Inter и JetBrains Mono самохостятся (без CDN). Токены и
+знаки — вендорные копии из репозитория маркетинга, см. раздел «Бренд» в
+`CLAUDE.md`.
+
+Внешние API, все read-only: CoinGecko (курсы токенов и SPL-минтов), Etherscan
+V2 (нативные балансы на 7 EVM-сетях), Blockchair (BTC), Solana public RPC (SOL
+и SPL-токены), UniSat (Руны на BTC).
 
 ## Установка
 

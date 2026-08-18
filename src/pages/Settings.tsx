@@ -47,43 +47,59 @@ export function Settings() {
     }
   }
 
-  if (loading) return <p>Загрузка...</p>
+  if (loading) return <p className="muted">Загрузка...</p>
 
   return (
-    <div style={{ maxWidth: 420 }}>
+    <div className="stack" style={{ maxWidth: 520 }}>
       <h1>Настройки</h1>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <label>
-          Базовая валюта
-          <select value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)} style={{ display: 'block', width: '100%' }}>
-            <option value="USD">USD</option>
-            <option value="RUB">RUB</option>
-          </select>
-        </label>
-        <label>
-          Etherscan API key
-          <input
-            value={etherscanApiKey}
-            onChange={(e) => setEtherscanApiKey(e.target.value)}
-            placeholder="Нужен для ETH и EVM-сетей (etherscan.io/apis)"
-            style={{ display: 'block', width: '100%' }}
-          />
-        </label>
-        <label>
-          UniSat API key
-          <input
-            value={unisatApiKey}
-            onChange={(e) => setUnisatApiKey(e.target.value)}
-            placeholder="Нужен для баланса Рун (developer.unisat.io)"
-            style={{ display: 'block', width: '100%' }}
-          />
-        </label>
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-        {saved && <p style={{ color: 'seagreen' }}>Сохранено</p>}
-        <button type="submit" disabled={saving}>
-          Сохранить
-        </button>
-      </form>
+
+      <section className="card">
+        <form onSubmit={handleSubmit} className="stack" style={{ gap: 16 }}>
+          <label className="stack" style={{ gap: 6 }}>
+            <span className="label">Базовая валюта</span>
+            <select value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)}>
+              <option value="USD">USD</option>
+              <option value="RUB">RUB</option>
+            </select>
+          </label>
+
+          <label className="stack" style={{ gap: 6 }}>
+            <span className="label">Etherscan API key</span>
+            <input
+              value={etherscanApiKey}
+              onChange={(e) => setEtherscanApiKey(e.target.value)}
+              placeholder="etherscan.io/apis"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <span className="warn">Балансы ETH и остальных EVM-сетей. Один ключ на все сети.</span>
+          </label>
+
+          <label className="stack" style={{ gap: 6 }}>
+            <span className="label">UniSat API key</span>
+            <input
+              value={unisatApiKey}
+              onChange={(e) => setUnisatApiKey(e.target.value)}
+              placeholder="developer.unisat.io"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <span className="warn">Балансы Рун на BTC-адресах. Без ключа Руны не подтянутся.</span>
+          </label>
+
+          {error && <p className="error">{error}</p>}
+          {saved && <p className="ok">Сохранено</p>}
+
+          <button type="submit" className="btn-primary" disabled={saving} style={{ alignSelf: 'flex-start' }}>
+            Сохранить
+          </button>
+        </form>
+      </section>
+
+      <p className="warn">
+        Ключи лежат в таблице <span className="mono">settings</span> и видны только тебе — доступ
+        закрыт политиками RLS.
+      </p>
     </div>
   )
 }

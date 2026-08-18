@@ -13,6 +13,7 @@ import {
 } from '../lib/walletAssets'
 import { getErrorMessage } from '../lib/errors'
 import { categoryTotals } from '../lib/valuation'
+import { formatUsd } from '../lib/format'
 import { emptyAssets } from '../types/snapshot'
 import type { Bank, CryptoHolding, InventoryItem, PhysicalAsset, SnapshotAssets, Token } from '../types/snapshot'
 
@@ -243,44 +244,59 @@ export function SnapshotNew() {
     }
   }
 
-  if (loading) return <p>Загрузка...</p>
+  if (loading) return <p className="muted">Загрузка...</p>
 
   return (
-    <div>
-      <h1>Новый снимок</h1>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <label>
-            Период{' '}
-            <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} required />
-          </label>
-          <label>
-            Курс USD/RUB{' '}
-            <input
-              type="number"
-              step="any"
-              value={usdRub}
-              onChange={(e) => setUsdRub(e.target.value)}
-              placeholder="например, 92.5"
-            />
-          </label>
-          <button type="button" onClick={handleRefreshBalances} disabled={refreshing}>
-            {refreshing ? 'Обновление...' : 'Обновить балансы'}
-          </button>
-        </div>
+    <div className="stack">
+      <div className="page-head">
+        <h1>Новый срез</h1>
+        <span className="label">прошлый срез подставлен, меняются только суммы</span>
+      </div>
 
-        {refreshErrors.length > 0 && (
-          <ul style={{ color: 'crimson' }}>
-            {refreshErrors.map((msg, i) => (
-              <li key={i}>{msg}</li>
-            ))}
-          </ul>
-        )}
+      <form onSubmit={handleSubmit} className="stack">
+        <section className="card">
+          <div className="row">
+            <label className="row" style={{ gap: 8 }}>
+              <span className="label">Период</span>
+              <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} required />
+            </label>
+            <label className="row" style={{ gap: 8 }}>
+              <span className="label">Курс USD/RUB</span>
+              <input
+                type="number"
+                step="any"
+                value={usdRub}
+                onChange={(e) => setUsdRub(e.target.value)}
+                placeholder="92.5"
+                style={{ width: 110 }}
+              />
+            </label>
+            <button type="button" onClick={handleRefreshBalances} disabled={refreshing} style={{ marginLeft: 'auto' }}>
+              {refreshing ? 'Обновление...' : 'Обновить балансы'}
+            </button>
+          </div>
 
-        <section>
-          <h2>Банки</h2>
+          {refreshErrors.length > 0 && (
+            <ul className="bullets" style={{ marginTop: 14 }}>
+              {refreshErrors.map((msg, i) => (
+                <li key={i} className="warn">
+                  {msg}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="card-head">
+            <h2>Банки</h2>
+            <button type="button" className="btn-quiet" onClick={addBank}>
+              + Банк
+            </button>
+          </div>
+          {assets.banks.length === 0 && <p className="muted">Пусто.</p>}
           {assets.banks.map((b, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            <div key={i} className="row" style={{ marginBottom: 8 }}>
               <input placeholder="Название" value={b.name} onChange={(e) => updateBank(i, { name: e.target.value })} />
               <input
                 type="number"
@@ -293,77 +309,87 @@ export function SnapshotNew() {
                 <option value="USD">USD</option>
                 <option value="RUB">RUB</option>
               </select>
-              <button type="button" onClick={() => removeBank(i)}>
+              <button type="button" className="btn-quiet" onClick={() => removeBank(i)}>
                 Удалить
               </button>
             </div>
           ))}
-          <button type="button" onClick={addBank}>
-            + Банк
-          </button>
         </section>
 
-        <section>
-          <h2>Крипта</h2>
-          {assets.crypto.map((holding, i) => (
-            <div key={i} style={{ border: '1px solid #333', padding: 10, marginBottom: 10 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {holding.type === 'wallet' ? (
-                  <strong>
-                    {holding.label} ({holding.chain})
-                  </strong>
-                ) : (
-                  <input
-                    placeholder="Название биржи (например, Binance)"
-                    value={holding.label}
-                    onChange={(e) => updateCryptoLabel(i, e.target.value)}
-                  />
-                )}
-                <button type="button" onClick={() => removeCryptoRow(i)}>
-                  Удалить строку
-                </button>
-              </div>
-              {holding.tokens.map((t, ti) => (
-                <div key={ti} style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <input
-                    placeholder="Symbol"
-                    value={t.symbol}
-                    onChange={(e) => updateToken(i, ti, { symbol: e.target.value.toUpperCase() })}
-                    style={{ width: 80 }}
-                  />
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="Amount"
-                    value={t.amount}
-                    onChange={(e) => updateToken(i, ti, { amount: Number(e.target.value) })}
-                  />
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="Price USD"
-                    value={t.priceUSD ?? ''}
-                    onChange={(e) => updateToken(i, ti, { priceUSD: e.target.value ? Number(e.target.value) : null })}
-                  />
-                  <button type="button" onClick={() => removeToken(i, ti)}>
-                    ×
+        <section className="card">
+          <div className="card-head">
+            <h2>Крипта</h2>
+            <button type="button" className="btn-quiet" onClick={addCexRow}>
+              + Биржа (CEX)
+            </button>
+          </div>
+          {assets.crypto.length === 0 && <p className="muted">Пусто.</p>}
+          <div className="stack" style={{ gap: 14 }}>
+            {assets.crypto.map((holding, i) => (
+              <div key={i}>
+                <div className="row">
+                  {holding.type === 'wallet' ? (
+                    <strong>
+                      {holding.label} <span className="muted">· {holding.chain}</span>
+                    </strong>
+                  ) : (
+                    <input
+                      placeholder="Название биржи (например, Binance)"
+                      value={holding.label}
+                      onChange={(e) => updateCryptoLabel(i, e.target.value)}
+                    />
+                  )}
+                  <button type="button" className="btn-quiet" onClick={() => addToken(i)}>
+                    + Токен
+                  </button>
+                  <button type="button" className="btn-quiet" onClick={() => removeCryptoRow(i)}>
+                    Удалить строку
                   </button>
                 </div>
-              ))}
-              <button type="button" onClick={() => addToken(i)} style={{ marginTop: 6 }}>
-                + Токен
-              </button>
-            </div>
-          ))}
-          <button type="button" onClick={addCexRow}>
-            + Биржа (CEX)
-          </button>
+                {holding.tokens.map((t, ti) => (
+                  <div key={ti} className="row" style={{ marginTop: 6 }}>
+                    <input
+                      placeholder="Symbol"
+                      value={t.symbol}
+                      onChange={(e) => updateToken(i, ti, { symbol: e.target.value.toUpperCase() })}
+                      className="mono"
+                      style={{ width: 120 }}
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Количество"
+                      value={t.amount}
+                      onChange={(e) => updateToken(i, ti, { amount: Number(e.target.value) })}
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Цена, $"
+                      value={t.priceUSD ?? ''}
+                      onChange={(e) => updateToken(i, ti, { priceUSD: e.target.value ? Number(e.target.value) : null })}
+                    />
+                    <button type="button" className="btn-quiet" onClick={() => removeToken(i, ti)}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {i < assets.crypto.length - 1 && <div className="divider" />}
+              </div>
+            ))}
+          </div>
         </section>
 
-        <section>
-          <h2>Инвентарь</h2>
+        <section className="card">
+          <div className="card-head">
+            <h2>Инвентарь</h2>
+            <button type="button" className="btn-quiet" onClick={addInventory}>
+              + Товар
+            </button>
+          </div>
+          {assets.inventory.length === 0 && <p className="muted">Пусто.</p>}
           {assets.inventory.map((it, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            <div key={i} className="row" style={{ marginBottom: 8 }}>
               <input
                 placeholder="Название"
                 value={it.name}
@@ -375,6 +401,7 @@ export function SnapshotNew() {
                 placeholder="Кол-во"
                 value={it.qty}
                 onChange={(e) => updateInventory(i, { qty: Number(e.target.value) })}
+                style={{ width: 100 }}
               />
               <input
                 type="number"
@@ -387,20 +414,23 @@ export function SnapshotNew() {
                 <option value="USD">USD</option>
                 <option value="RUB">RUB</option>
               </select>
-              <button type="button" onClick={() => removeInventory(i)}>
+              <button type="button" className="btn-quiet" onClick={() => removeInventory(i)}>
                 Удалить
               </button>
             </div>
           ))}
-          <button type="button" onClick={addInventory}>
-            + Товар
-          </button>
         </section>
 
-        <section>
-          <h2>Физические активы</h2>
+        <section className="card">
+          <div className="card-head">
+            <h2>Физические активы</h2>
+            <button type="button" className="btn-quiet" onClick={addPhysical}>
+              + Актив
+            </button>
+          </div>
+          {assets.physical.length === 0 && <p className="muted">Пусто.</p>}
           {assets.physical.map((p, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            <div key={i} className="row" style={{ marginBottom: 8 }}>
               <input
                 placeholder="Название"
                 value={p.name}
@@ -417,23 +447,25 @@ export function SnapshotNew() {
                 <option value="USD">USD</option>
                 <option value="RUB">RUB</option>
               </select>
-              <button type="button" onClick={() => removePhysical(i)}>
+              <button type="button" className="btn-quiet" onClick={() => removePhysical(i)}>
                 Удалить
               </button>
             </div>
           ))}
-          <button type="button" onClick={addPhysical}>
-            + Актив
-          </button>
         </section>
 
-        <div style={{ fontSize: 20, fontWeight: 'bold' }}>Итого: ${totalUsd.toFixed(2)}</div>
-
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-
-        <button type="submit" disabled={submitting} style={{ alignSelf: 'flex-start' }}>
-          Сохранить снимок
-        </button>
+        <section className="card">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div>
+              <div className="label">Итого</div>
+              <div className="total-sub">{formatUsd(totalUsd)}</div>
+            </div>
+            <button type="submit" className="btn-primary" disabled={submitting}>
+              Сохранить срез
+            </button>
+          </div>
+          {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
+        </section>
       </form>
     </div>
   )

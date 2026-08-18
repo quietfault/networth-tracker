@@ -1,8 +1,8 @@
-# Net Worth Tracker — проектный файл для Claude Code
+# Срез — проектный файл для Claude Code
 
 ## Что это
 
-Персональный трекер состояния. Замена ручного Excel-файла, который ведётся с 2017 года.
+**Срез** — персональный трекер состояния quietfault. Замена ручного Excel-файла, который ведётся с 2017 года.
 Раз в месяц пользователь делает срез по всем активам → видит динамику cash и networth на графиках.
 
 **Целевой пользователь:** человек с нестандартным портфелем — крипто (CEX + self-custody), банки, физические активы, товарный инвентарь.
@@ -12,6 +12,7 @@
 ## Стек
 
 - **Frontend:** React + Vite + TypeScript
+- **Оформление:** брендбук quietfault (`quietfault/marketing`, `brand/`). Токены и знаки лежат в этом репозитории вендорными копиями — см. «Бренд» ниже
 - **Хранение и авторизация:** Supabase (Postgres + Auth, email/password). Решено осознанно — данные привязаны к аккаунту через RLS (`user_id = auth.uid()`), доступны с любого устройства после логина. Схема и политики: [supabase/schema.sql](supabase/schema.sql)
 - **Деплой:** GitHub Pages, автоматически через GitHub Actions при пуше в `main` ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)). `base: '/networth-tracker/'` в `vite.config.ts`, роутинг — HashRouter
 - **Внешние API (read-only, без ключей пользователя по умолчанию):**
@@ -80,16 +81,56 @@ TypeScript-типы: [src/types/snapshot.ts](src/types/snapshot.ts). CRUD: [src/
 
 ---
 
+## Бренд
+
+Источник правды — приватный репозиторий `quietfault/marketing`, каталог
+`brand/`: `BRANDBOOK.md`, `tokens/tokens.css`, `logo/`. Здесь лежат **копии**,
+и правятся они только там:
+
+| Здесь | Откуда |
+|---|---|
+| `src/styles/tokens.css` | `brand/tokens/tokens.css` (брендбук 1.0) |
+| `src/assets/brand/lockup--dark.svg`, `lockup--light.svg` | `brand/logo/primary/` |
+| `src/assets/brand/mark--dark.svg`, `mark--light.svg` | `brand/logo/primary/` |
+| `src/assets/brand/bullet--dark.svg`, `bullet--light.svg` | `brand/logo/secondary/` |
+| `public/favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, `icon-192/512.png` | `brand/logo/primary/` и `primary/png/` |
+
+Правила, которые легко нарушить незаметно:
+
+- **Цвет и размер берутся только из токенов.** Литерал вроде `#f97316` в
+  компоненте — ошибка. Единственные собственные значения проекта живут в шапке
+  `src/styles/app.css` (`--radius-control`, `--series-1…4`) и там же объяснены.
+- **Один акцент.** Оранжевый — на один элемент в блоке.
+- **Тёмный акцент `#f97316` не ставится на светлый фон** (2,63 : 1). Для
+  светлой темы есть `--accent` и отдельный `--accent-text` для текста.
+- **Шрифты самохостятся** через `@fontsource-variable/inter` и
+  `@fontsource/jetbrains-mono`. Google Fonts и любой CDN запрещены — отдают IP
+  посетителя.
+- **Лого-блок не собирается вручную** из знака и слова: берётся готовый
+  `lockup--*.svg`. `--mono`-версии через `<img>` не работают (`currentColor` не
+  наследуется), поэтому вариант под тему выбирается CSS-классами `on-dark` /
+  `on-light` в `src/components/Logo.tsx`.
+- **Имя компании — `quietfault`**: строчными, слитно, в любом тексте.
+- **Два знака не взаимозаменяемы.** «Пересборка» (полосы) — шапка, экран входа,
+  фавикон. «Разлом» (кольцо) — буллет списка предупреждений и разделитель между
+  кошельками в форме среза. Почему выбрано так — `DECISIONS.md`.
+
+Тема: тёмная по умолчанию, светлая — переключателем в шапке, выбор хранится в
+`localStorage` под ключом `qf-theme`, атрибут `data-theme` ставится инлайн-
+скриптом в `index.html` до первой отрисовки.
+
+---
+
 ## Структура страниц / роутинг
 
 ```
-/ (Dashboard)
-  — последний снимок: итоговая сумма networth
+/ (Обзор)
+  — последний срез: итоговая сумма networth
   — график networth по месяцам (line chart)
   — разбивка по категориям (pie или bar)
 
 /snapshot/new
-  — форма создания нового снимка
+  — форма создания нового среза
   — по категориям: банки / крипто / инвентарь / физические активы
   — кнопка "Обновить балансы" — дёргает API для кошельков
 
@@ -215,7 +256,8 @@ EVM-сеть), которые показываются рядом с теми б
 
 ## Текущий статус
 
-Готово: scaffold, Supabase-схема + RLS, auth (email/password), типы и data layer,
+Готово: оформление по брендбуку (тёмная/светлая тема, знаки, шрифты),
+Supabase-схема + RLS, auth (email/password), типы и data layer,
 `/wallets` (мультичейн EVM + Solana + Runes-балансы), `/snapshot/new` (полная форма
 с предзаполнением, "Обновить балансы", live-расчёт итога), `/settings` (API-ключи),
 Dashboard (line chart networth + pie разбивка по категориям). Задеплоено на

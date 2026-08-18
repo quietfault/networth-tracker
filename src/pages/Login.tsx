@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { Logo } from '../components/Logo'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 export function Login() {
   const { session, signIn, signUp } = useAuth()
@@ -30,36 +32,54 @@ export function Login() {
   }
 
   return (
-    <div style={{ maxWidth: 360, margin: '80px auto' }}>
-      <h1>Net Worth Tracker</h1>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Пароль"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={6}
-        />
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-        {info && <p style={{ color: 'seagreen' }}>{info}</p>}
-        <button type="submit" disabled={submitting}>
-          {mode === 'signin' ? 'Войти' : 'Зарегистрироваться'}
-        </button>
-      </form>
-      <button
-        onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-        style={{ marginTop: 12, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}
-      >
-        {mode === 'signin' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-      </button>
+    <div className="login">
+      <div className="login-card">
+        <Logo />
+
+        <div>
+          <h1>Срез</h1>
+          <p className="muted">
+            Личный трекер состояния: банки, крипта, инвентарь и физические активы одним
+            снимком в месяц.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="stack" style={{ gap: 12 }}>
+          <input
+            type="email"
+            placeholder="Email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            placeholder="Пароль"
+            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+          />
+          {error && <p className="error">{error}</p>}
+          {info && <p className="ok">{info}</p>}
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            {mode === 'signin' ? 'Войти' : 'Зарегистрироваться'}
+          </button>
+        </form>
+
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+          >
+            {mode === 'signin' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+          </button>
+          <ThemeToggle />
+        </div>
+      </div>
     </div>
   )
 }

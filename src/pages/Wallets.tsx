@@ -117,79 +117,109 @@ export function Wallets() {
   }
 
   return (
-    <div>
-      <h1>Кошельки</h1>
+    <div className="stack">
+      <div className="page-head">
+        <h1>Кошельки</h1>
+        <span className="label">адрес вводится один раз</span>
+      </div>
 
-      <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20 }}>
-        <input
-          placeholder="Label (например, MetaMask main)"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          required
-        />
-        <select value={chain} onChange={(e) => setChain(e.target.value as Chain)}>
-          <option value="ethereum">Ethereum</option>
-          <option value="bitcoin">Bitcoin</option>
-          <option value="solana">Solana</option>
-        </select>
-        <input
-          placeholder="Адрес"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          required
-          style={{ flex: 1 }}
-        />
-        <button type="submit" disabled={submitting}>
-          Добавить
-        </button>
-      </form>
+      <section className="card">
+        <form onSubmit={handleAdd} className="row">
+          <input
+            placeholder="Label (например, MetaMask main)"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            required
+          />
+          <select value={chain} onChange={(e) => setChain(e.target.value as Chain)}>
+            <option value="ethereum">Ethereum</option>
+            <option value="bitcoin">Bitcoin</option>
+            <option value="solana">Solana</option>
+          </select>
+          <input
+            placeholder="Адрес"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            required
+            style={{ flex: '1 1 260px' }}
+          />
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            Добавить
+          </button>
+        </form>
+        {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
+      </section>
 
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      {loading && <p>Загрузка...</p>}
+      {loading && <p className="muted">Загрузка...</p>}
+      {!loading && wallets.length === 0 && <p className="muted">Кошельков пока нет.</p>}
 
-      {!loading && wallets.length === 0 && <p>Кошельков пока нет.</p>}
-
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <tbody>
-          {wallets.map((w) => {
-            const b = balances[w.id]
-            return (
-              <tr key={w.id} style={{ borderBottom: '1px solid #333' }}>
-                <td style={{ padding: '8px 0', verticalAlign: 'top' }}>{w.label}</td>
-                <td style={{ verticalAlign: 'top' }}>{CHAIN_LABELS[w.chain]}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 12, verticalAlign: 'top' }}>{w.address}</td>
-                <td style={{ verticalAlign: 'top' }}>
-                  {b?.loading && 'Загрузка...'}
-                  {b?.error && <div style={{ color: 'crimson' }}>{b.error}</div>}
-                  {b?.assets.map((asset, i) => (
-                    <div key={i}>
-                      {formatAmount(asset.amount)} {asset.symbol}
-                      {asset.priceUSD != null && ` (~${formatUsd(asset.amount * asset.priceUSD)})`}
-                      {asset.note && asset.note !== asset.symbol && (
-                        <span style={{ opacity: 0.5, fontSize: 12 }}> · {asset.note}</span>
-                      )}
-                    </div>
-                  ))}
-                  {b && !b.loading && !b.error && b.assets.length === 0 && b.warnings.length === 0 && (
-                    <span style={{ opacity: 0.6 }}>нет средств</span>
-                  )}
-                  {b?.warnings.map((warning, i) => (
-                    <div key={i} style={{ color: 'goldenrod', fontSize: 12 }}>
-                      {warning}
-                    </div>
-                  ))}
-                </td>
-                <td style={{ verticalAlign: 'top' }}>
-                  <button onClick={() => loadBalance(w)}>Обновить</button>
-                </td>
-                <td style={{ verticalAlign: 'top' }}>
-                  <button onClick={() => handleDelete(w.id)}>Удалить</button>
-                </td>
+      {wallets.length > 0 && (
+        <section className="card">
+          <table>
+            <thead>
+              <tr>
+                <th>Кошелёк</th>
+                <th>Сеть</th>
+                <th>Баланс</th>
+                <th />
               </tr>
-            )
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {wallets.map((w) => {
+                const b = balances[w.id]
+                return (
+                  <tr key={w.id}>
+                    <td>
+                      <div>{w.label}</div>
+                      <div className="addr">{w.address}</div>
+                    </td>
+                    <td className="muted">{CHAIN_LABELS[w.chain]}</td>
+                    <td>
+                      {b?.loading && <span className="muted">Загрузка...</span>}
+                      {b?.error && <div className="error">{b.error}</div>}
+                      {b?.assets.map((asset, i) => (
+                        <div key={i}>
+                          <span className="mono">
+                            {formatAmount(asset.amount)} {asset.symbol}
+                          </span>
+                          {asset.priceUSD != null && (
+                            <span className="muted mono"> ~{formatUsd(asset.amount * asset.priceUSD)}</span>
+                          )}
+                          {asset.note && asset.note !== asset.symbol && (
+                            <div className="addr">{asset.note}</div>
+                          )}
+                        </div>
+                      ))}
+                      {b && !b.loading && !b.error && b.assets.length === 0 && b.warnings.length === 0 && (
+                        <span className="muted">нет средств</span>
+                      )}
+                      {b && b.warnings.length > 0 && (
+                        <ul className="bullets" style={{ marginTop: 6 }}>
+                          {b.warnings.map((warning, i) => (
+                            <li key={i} className="warn">
+                              {warning}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    <td>
+                      <div className="cell-actions">
+                        <button type="button" className="btn-quiet" onClick={() => loadBalance(w)}>
+                          Обновить
+                        </button>
+                        <button type="button" className="btn-quiet" onClick={() => handleDelete(w.id)}>
+                          Удалить
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
     </div>
   )
 }
