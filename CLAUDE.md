@@ -254,27 +254,18 @@ EVM-сеть), которые показываются рядом с теми б
 
 ---
 
-## Текущий статус
+## Состояние
 
-Готово: оформление по брендбуку (тёмная/светлая тема, знаки, шрифты),
-Supabase-схема + RLS, auth (email/password), типы и data layer,
-`/wallets` (мультичейн EVM + Solana + Runes-балансы), `/snapshot/new` (полная форма
-с предзаполнением, "Обновить балансы", live-расчёт итога), `/settings` (API-ключи),
-Dashboard (line chart networth + pie разбивка по категориям). Задеплоено на
-GitHub Pages: https://quietfault.github.io/networth-tracker/ (HashRouter,
-автодеплой через GitHub Actions при пуше в `main`, см.
-[.github/workflows/deploy.yml](.github/workflows/deploy.yml)).
+Где проект стоит сейчас, что в работе и что висит на владельце — [STATUS.md](STATUS.md).
+Здесь этого списка нет намеренно: он устаревает каждую сессию, а два места для
+одного факта расходятся молча.
 
-Не сделано:
-- `/snapshot/:id` — сейчас заглушка, не показывает реальные данные снимка
-- Экспорт в JSON
-- Закрыть регистрацию в Supabase (Authentication → Sign In / Providers →
-  выключить "Allow new users to sign up") после того как основной аккаунт
-  создан — сейчас форма регистрации доступна всем, кто зайдёт на сайт
+Прод: https://quietfault.github.io/networth-tracker/
 
 См. также [DECISIONS.md](DECISIONS.md) — почему выбраны именно эти решения,
 какие альтернативы отвергнуты и найденные по пути ловушки (Supabase-гранты,
-GitHub Actions secrets/environments).
+GitHub Actions secrets/environments), и [ЛЕТОПИСЬ.md](ЛЕТОПИСЬ.md) — что и когда
+происходило.
 
 ---
 
