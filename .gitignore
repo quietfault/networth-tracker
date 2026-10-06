@@ -30,3 +30,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Spreadsheets carry real balances; the repo is public. Only the invented-data template is tracked.
+*.xlsx
+*.xls
+*.csv
+!docs/import/import-template.xlsx
