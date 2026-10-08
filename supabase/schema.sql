@@ -36,6 +36,7 @@ create table snapshots (
   entries jsonb not null default '[]'::jsonb check (jsonb_typeof(entries) = 'array'),
   reported_total_rub numeric,
   source text not null check (source in ('import', 'manual')),
+  check (source <> 'import' or reported_total_rub is not null),
   created_at timestamptz not null default now(),
   unique (user_id, period)
 );
@@ -58,9 +59,9 @@ create policy snapshots_owner on snapshots
 create policy settings_owner on settings
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Supabase grants new public tables to anon by default; take that back
--- explicitly, then give logged-in users only what the app needs.
+-- Revoke defensively in case the project ever grants new public tables to API roles, then give logged-in users only what the app needs.
 revoke all on places, snapshots, settings from anon, authenticated;
-grant select, insert, update, delete on places to authenticated;
+-- No delete: snapshots reference places only inside jsonb and cannot be updated, so deleting a place with history would orphan its amounts.
+grant select, insert, update on places to authenticated;
 grant select, insert on snapshots to authenticated;
 grant select, insert, update on settings to authenticated;
