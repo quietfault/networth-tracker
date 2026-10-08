@@ -1,5 +1,6 @@
 import type { Currency, Rates, SnapshotEntry, SnapshotSource } from '../model/types'
 import type { ImportPlace, ImportSnapshot, ParsedWorkbook } from './parseWorkbook'
+import type { ReconcileStatus, Reconciliation } from './reconcile'
 
 export interface ExistingData {
   places: { name: string; currency: Currency }[]
@@ -42,6 +43,18 @@ export function planImport(parsed: ParsedWorkbook, existing: ExistingData): Impo
 
 export function canCommit(parsed: ParsedWorkbook, plan: ImportPlan): boolean {
   return parsed.issues.length === 0 && plan.currencyConflicts.length === 0 && plan.snapshotsToCreate.length > 0
+}
+
+export type RowVerdict = ReconcileStatus | 'in-database'
+
+// A month already in the database is not going to be written, so its reconciliation verdict
+// is beside the point and must not be shown (or counted) as if it were.
+export function rowVerdict(row: Reconciliation, plan: ImportPlan): RowVerdict {
+  return plan.skippedPeriods.includes(row.period) ? 'in-database' : row.status
+}
+
+export function mismatchesToWrite(rows: Reconciliation[], plan: ImportPlan): number {
+  return rows.filter((r) => rowVerdict(r, plan) === 'mismatch').length
 }
 
 export interface NewSnapshot {

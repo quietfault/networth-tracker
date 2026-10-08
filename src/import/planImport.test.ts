@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ImportSnapshot, ParsedWorkbook } from './parseWorkbook'
-import { canCommit, planImport, toNewSnapshot } from './planImport'
+import type { Reconciliation } from './reconcile'
+import { canCommit, mismatchesToWrite, planImport, rowVerdict, toNewSnapshot } from './planImport'
 
 const snap = (period: string, amounts: Record<string, number>): ImportSnapshot => ({
   row: 4,
@@ -72,5 +73,29 @@ describe('toNewSnapshot', () => {
 
   it('refuses an amount whose place has no id', () => {
     expect(() => toNewSnapshot(snap('2025-01', { Альфа: 5 }), new Map())).toThrow(/Альфа/)
+  })
+})
+
+describe('rowVerdict and mismatchesToWrite', () => {
+  const rec = (period: string, status: Reconciliation['status']): Reconciliation => ({
+    row: 4,
+    period,
+    computedRub: 10,
+    reportedRub: 20,
+    diffRub: -10,
+    status,
+  })
+  const rows = [rec('2025-01', 'mismatch'), rec('2025-02', 'mismatch'), rec('2025-03', 'match')]
+  const plan = planImport(parsed, { places: [], periods: ['2025-02'] })
+
+  it('shows a month already in the database as such, whatever the reconciliation said', () => {
+    expect(rowVerdict(rows[1], plan)).toBe('in-database')
+    expect(rowVerdict(rows[0], plan)).toBe('mismatch')
+    expect(rowVerdict(rows[2], plan)).toBe('match')
+  })
+
+  it('counts only mismatches that would actually be written', () => {
+    expect(mismatchesToWrite(rows, plan)).toBe(1)
+    expect(mismatchesToWrite([rows[1]], plan)).toBe(0)
   })
 })

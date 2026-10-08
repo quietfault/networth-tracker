@@ -25,3 +25,11 @@ export function formatUsd(n: number): string {
 export function formatRub(n: number): string {
   return `${group(n.toFixed(0))} ₽`
 }
+
+// Reconciliation difference: sub-ruble precision matters here (the tolerance is 1 ₽), and the
+// sign carries meaning, so it is always explicit. Anything that rounds to zero is plain zero.
+export function formatRubDiff(n: number): string {
+  const fixed = Math.abs(n).toFixed(2)
+  if (fixed === '0.00') return '0.00 ₽'
+  return `${n < 0 ? '−' : '+'}${group(fixed)} ₽`
+}
