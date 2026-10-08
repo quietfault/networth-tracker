@@ -174,4 +174,38 @@ describe('parseWorkbook format errors', () => {
     const parsed = parseWorkbook(book([place], [...SNAP_HEAD, 'Сбер'], [row({ 0: 'x' })]))
     expect(parsed.issues[0]).toMatchObject({ sheet: 'Срезы', row: 4 })
   })
+
+  it('matches a «Срезы» header with trailing spaces to the place', () => {
+    const parsed = parseWorkbook(book([place], [...SNAP_HEAD, 'Сбер '], [row()]))
+    expect(parsed.issues).toEqual([])
+    expect(parsed.snapshots[0].amounts).toEqual({ Сбер: 5 })
+  })
+
+  it('skips a future-dated row with an issue, and lets that month be filled later', () => {
+    const today = d('2025-03-15')
+    const parsed = parseWorkbook(
+      book([place], [...SNAP_HEAD, 'Сбер'], [row({ 0: d('2025-03-16') }), row({ 0: d('2025-03-31') })]),
+      today,
+    )
+    expect(parsed.issues.map((i) => i.message)).toEqual([
+      'Дата среза в будущем: «2025-03-16»',
+      'Дата среза в будущем: «2025-03-31»',
+    ])
+    expect(parsed.snapshots).toEqual([])
+  })
+
+  it('accepts today itself', () => {
+    const parsed = parseWorkbook(book([place], [...SNAP_HEAD, 'Сбер'], [row({ 0: d('2025-03-15') })]), d('2025-03-15'))
+    expect(parsed.issues).toEqual([])
+    expect(parsed.snapshots).toHaveLength(1)
+  })
+
+  it('skips a row where every place amount is zero', () => {
+    const parsed = parseWorkbook(book([place], [...SNAP_HEAD, 'Сбер'], [row({ 4: 0, 5: 0 }), row({ 0: d('2025-02-28'), 5: null })]))
+    expect(parsed.issues.map((i) => i.message)).toEqual([
+      'Все суммы в строке нулевые — похоже на заготовку будущего месяца',
+      'Все суммы в строке нулевые — похоже на заготовку будущего месяца',
+    ])
+    expect(parsed.snapshots).toEqual([])
+  })
 })

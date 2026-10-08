@@ -141,6 +141,7 @@ function parseSnapshots(
   data: Cell[][],
   { places, knownNames }: ParsedPlaces,
   issues: ImportIssue[],
+  today: string,
 ): ImportSnapshot[] {
   const headerIndex = data.findIndex((r) => text(r[0]) === DATE)
   if (headerIndex < 0) {
@@ -195,6 +196,12 @@ function parseSnapshots(
     }
     // read-excel-file returns dates as UTC midnight.
     const snapshotDate = date.toISOString().slice(0, 10)
+    // A pre-filled future row (date by formula, total 0) would occupy a month and block the
+    // real snapshot later; snapshots cannot be deleted from the app. It must not claim the month.
+    if (snapshotDate > today) {
+      issue(`Дата среза в будущем: «${snapshotDate}»`)
+      continue
+    }
     const period = snapshotDate.slice(0, 7)
     const first = firstRowOfPeriod.get(period)
     if (first !== undefined) {
@@ -227,6 +234,11 @@ function parseSnapshots(
       }
     }
 
+    if (!broken && placeColumns.length > 0 && placeColumns.every(({ name }) => amounts[name] === 0)) {
+      issue('Все суммы в строке нулевые — похоже на заготовку будущего месяца')
+      continue
+    }
+
     const hasEuros = placeColumns.some(({ name }) => currencyOf.get(name) === 'EUR' && (amounts[name] ?? 0) !== 0)
     if (hasEuros && eurUsd === null && !broken) {
       issue('Есть суммы в EUR, но не заполнен курс EUR/USD')
@@ -252,7 +264,7 @@ function parseSnapshots(
   return snapshots
 }
 
-export function parseWorkbook(sheets: RawSheet[]): ParsedWorkbook {
+export function parseWorkbook(sheets: RawSheet[], today: Date = new Date()): ParsedWorkbook {
   const issues: ImportIssue[] = []
   const placesSheet = sheets.find((s) => s.sheet === PLACES)
   const snapshotsSheet = sheets.find((s) => s.sheet === SNAPSHOTS)
@@ -262,6 +274,6 @@ export function parseWorkbook(sheets: RawSheet[]): ParsedWorkbook {
   if (!placesSheet || !snapshotsSheet) return { places: [], snapshots: [], issues }
 
   const parsedPlaces = parsePlaces(placesSheet.data, issues)
-  const snapshots = parseSnapshots(snapshotsSheet.data, parsedPlaces, issues)
+  const snapshots = parseSnapshots(snapshotsSheet.data, parsedPlaces, issues, today.toISOString().slice(0, 10))
   return { places: parsedPlaces.places, snapshots, issues }
 }
