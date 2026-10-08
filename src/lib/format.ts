@@ -21,3 +21,7 @@ export function formatAmount(n: number): string {
 export function formatUsd(n: number): string {
   return `$${group(n.toFixed(2))}`
 }
+
+export function formatRub(n: number): string {
+  return `${group(n.toFixed(0))} ₽`
+}
