@@ -19,9 +19,7 @@ export function Layout() {
             <NavLink to="/" end>
               Обзор
             </NavLink>
-            <NavLink to="/snapshot/new">Новый срез</NavLink>
-            <NavLink to="/wallets">Кошельки</NavLink>
-            <NavLink to="/settings">Настройки</NavLink>
+            <NavLink to="/import">Импорт</NavLink>
           </nav>
 
           <div className="masthead-side">

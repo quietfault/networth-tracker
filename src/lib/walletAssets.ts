@@ -4,7 +4,7 @@ import { fetchSolBalance, fetchSplTokens } from './api/solana'
 import { fetchRuneBalances } from './api/unisat'
 import { fetchTokenPrices, fetchTokenPricesByContract } from './api/coingecko'
 import { getErrorMessage } from './errors'
-import type { Chain } from '../types/snapshot'
+import type { Chain } from '../model/types'
 
 export interface WalletAsset {
   symbol: string

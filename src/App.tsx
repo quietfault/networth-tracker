@@ -2,11 +2,8 @@ import { Routes, Route } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Login } from './pages/Login'
-import { Dashboard } from './pages/Dashboard'
-import { Wallets } from './pages/Wallets'
-import { Settings } from './pages/Settings'
-import { SnapshotNew } from './pages/SnapshotNew'
-import { SnapshotView } from './pages/SnapshotView'
+import { Overview } from './pages/Overview'
+import { Import } from './pages/Import'
 
 function App() {
   return (
@@ -19,11 +16,8 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/snapshot/new" element={<SnapshotNew />} />
-        <Route path="/snapshot/:id" element={<SnapshotView />} />
-        <Route path="/wallets" element={<Wallets />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/" element={<Overview />} />
+        <Route path="/import" element={<Import />} />
       </Route>
     </Routes>
   )
