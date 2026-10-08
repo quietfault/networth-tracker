@@ -30,6 +30,7 @@ create table snapshots (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   period text not null check (period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
   snapshot_date date not null,
+  check (period = to_char(snapshot_date, 'YYYY-MM')),
   usdt_rub numeric not null check (usdt_rub > 0),
   eur_usd numeric check (eur_usd > 0),
   btc_usd numeric not null check (btc_usd > 0),
@@ -62,6 +63,8 @@ create policy settings_owner on settings
 -- Revoke defensively in case the project ever grants new public tables to API roles, then give logged-in users only what the app needs.
 revoke all on places, snapshots, settings from anon, authenticated;
 -- No delete: snapshots reference places only inside jsonb and cannot be updated, so deleting a place with history would orphan its amounts.
-grant select, insert, update on places to authenticated;
+grant select, insert on places to authenticated;
+-- id and currency are not updatable: id is referenced from immutable snapshots, currency would reprice history.
+grant update (name, category, form, sort_order, chain, address) on places to authenticated;
 grant select, insert on snapshots to authenticated;
 grant select, insert, update on settings to authenticated;
