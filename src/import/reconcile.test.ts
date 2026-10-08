@@ -31,6 +31,23 @@ describe('reconcile', () => {
     expect(r.diffRub).toBeCloseTo(2, 6)
   })
 
+  // Exactly representable numbers: the boundary is inclusive and must not depend on float noise.
+  it('matches at a difference of exactly one ruble (inclusive boundary)', () => {
+    const r = reconcile(snapshot({ Сбер: 101000 }, 100999), places)
+    expect(r.diffRub).toBe(1)
+    expect(r.status).toBe('match')
+  })
+
+  it('says mismatch just beyond one ruble', () => {
+    const r = reconcile(snapshot({ Сбер: 101000 }, 100998.5), places)
+    expect(r.diffRub).toBe(1.5)
+    expect(r.status).toBe('mismatch')
+  })
+
+  it('throws, naming the place, when an amount belongs to a place not in the list', () => {
+    expect(() => reconcile(snapshot({ Сбер: 1, Призрак: 5 }, 1), places)).toThrow(/Призрак/)
+  })
+
   it('says no-total when Excel gave no total', () => {
     expect(reconcile(snapshot({ Сбер: 1 }, null), places)).toMatchObject({ status: 'no-total', diffRub: null })
   })
