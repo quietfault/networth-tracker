@@ -1,48 +1,66 @@
--- Net Worth Tracker — Supabase schema
--- Выполнить целиком в Supabase Dashboard → SQL Editor → New query
+-- «Срез» — Supabase schema (rebuild, 2026-10)
+-- Run whole in Supabase Dashboard → SQL Editor → New query.
+-- DESTRUCTIVE: drops the previous tables and everything in them.
 
-create table if not exists wallets (
+drop table if exists wallets cascade;
+drop table if exists snapshots cascade;
+drop table if exists settings cascade;
+drop table if exists places cascade;
+
+-- A place where money is or was kept. Name and category are live: editing
+-- them regroups history. Currency is fixed once amounts exist (enforced in the app).
+create table places (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  label text not null,
-  chain text not null check (chain in ('ethereum', 'bitcoin', 'solana')),
-  address text not null,
-  created_at timestamptz not null default now()
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null check (length(trim(name)) > 0),
+  category text not null check (length(trim(category)) > 0),
+  currency text not null check (currency in ('RUB', 'USD', 'EUR', 'BTC')),
+  form text not null default 'none' check (form in ('cash', 'noncash', 'none')),
+  sort_order integer not null default 0,
+  chain text check (chain in ('ethereum', 'bitcoin', 'solana')),
+  address text,
+  created_at timestamptz not null default now(),
+  unique (user_id, name),
+  check ((chain is null) = (address is null))
 );
 
-create table if not exists snapshots (
+-- One snapshot per month. Amounts and rates are immutable: no update grant.
+create table snapshots (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  period text not null, -- '2024-12'
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  period text not null check (period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
   snapshot_date date not null,
-  assets jsonb not null default '{}'::jsonb, -- { banks, crypto, inventory, physical }
-  usd_rub numeric,
-  total_usd numeric,
+  usdt_rub numeric not null check (usdt_rub > 0),
+  eur_usd numeric check (eur_usd > 0),
+  btc_usd numeric not null check (btc_usd > 0),
+  entries jsonb not null default '[]'::jsonb check (jsonb_typeof(entries) = 'array'),
+  reported_total_rub numeric,
+  source text not null check (source in ('import', 'manual')),
   created_at timestamptz not null default now(),
   unique (user_id, period)
 );
 
-create table if not exists settings (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  base_currency text not null default 'USD',
-  etherscan_api_key text,
+create table settings (
+  user_id uuid primary key default auth.uid() references auth.users(id) on delete cascade,
   unisat_api_key text,
+  coingecko_api_key text,
   updated_at timestamptz not null default now()
 );
 
-alter table wallets enable row level security;
+alter table places enable row level security;
 alter table snapshots enable row level security;
 alter table settings enable row level security;
 
-create policy "wallets_owner" on wallets
+create policy places_owner on places
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy snapshots_owner on snapshots
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy settings_owner on settings
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy "snapshots_owner" on snapshots
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-
-create policy "settings_owner" on settings
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-
--- Only logged-in users may touch these tables; RLS policies above then
--- restrict each authenticated user to their own rows via user_id.
-grant select, insert, update, delete on wallets, snapshots, settings to authenticated;
+-- Supabase grants new public tables to anon by default; take that back
+-- explicitly, then give logged-in users only what the app needs.
+revoke all on places, snapshots, settings from anon, authenticated;
+grant select, insert, update, delete on places to authenticated;
+grant select, insert on snapshots to authenticated;
+grant select, insert, update on settings to authenticated;
