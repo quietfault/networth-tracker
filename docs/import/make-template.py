@@ -1,5 +1,6 @@
 # Generates import-template.xlsx: the import contract with invented data.
 # Run: python docs/import/make-template.py
+#      powershell -File docs/import/save-through-excel.ps1   (fills formula values)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
