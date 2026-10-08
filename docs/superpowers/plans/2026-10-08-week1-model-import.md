@@ -154,8 +154,8 @@ describe('totalsFromRub', () => {
   it('derives dollars and bitcoin from rubles with the same rates', () => {
     const t = totalsFromRub(5427016, rates)
     expect(t.rub).toBe(5427016)
-    expect(t.usd).toBeCloseTo(53733.82178, 4)
-    expect(t.btc).toBeCloseTo(0.526802174, 8)
+    expect(t.usd).toBeCloseTo(53732.831683, 4)
+    expect(t.btc).toBeCloseTo(0.526792467, 8)
   })
 })
 ```
