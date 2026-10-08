@@ -34,5 +34,8 @@ dist-ssr
 # Spreadsheets carry real balances; the repo is public. Only the invented-data template is tracked.
 *.xlsx
 *.xls
+*.xlsm
+*.xlsb
+*.ods
 *.csv
 !docs/import/import-template.xlsx
