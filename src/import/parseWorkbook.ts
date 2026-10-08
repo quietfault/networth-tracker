@@ -63,6 +63,11 @@ const FORM_BY_LABEL: Record<string, PlaceForm> = {
   '': 'none',
 }
 
+// Plain lookup: keys like "constructor" must not resolve through Object.prototype.
+function lookup<T>(table: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined
+}
+
 function text(c: Cell | undefined): string {
   return c === null || c === undefined ? '' : String(c).trim()
 }
@@ -75,7 +80,13 @@ function isBlankRow(r: Cell[]): boolean {
   return r.every(isBlank)
 }
 
-function parsePlaces(data: Cell[][], issues: ImportIssue[]): ImportPlace[] {
+interface ParsedPlaces {
+  places: ImportPlace[]
+  // every name that appears on «Места», valid or not: an invalid one is already explained there
+  knownNames: Set<string>
+}
+
+function parsePlaces(data: Cell[][], issues: ImportIssue[]): ParsedPlaces {
   const head = (data[0] ?? []).map(text)
   const col = {
     name: head.indexOf('Место'),
@@ -86,7 +97,7 @@ function parsePlaces(data: Cell[][], issues: ImportIssue[]): ImportPlace[] {
   const missing = (['Место', 'Категория', 'Валюта', 'Форма'] as const).filter((h) => !head.includes(h))
   if (missing.length > 0) {
     issues.push({ sheet: PLACES, row: 1, message: `Нет колонок: ${missing.join(', ')}` })
-    return []
+    return { places: [], knownNames: new Set() }
   }
 
   const places: ImportPlace[] = []
@@ -111,22 +122,26 @@ function parsePlaces(data: Cell[][], issues: ImportIssue[]): ImportPlace[] {
       issue(`У места «${name}» пустая категория`)
       continue
     }
-    const currency = CURRENCY_BY_LABEL[text(r[col.currency]).toUpperCase()]
+    const currency = lookup(CURRENCY_BY_LABEL, text(r[col.currency]).toUpperCase())
     if (!currency) {
       issue(`У места «${name}» неизвестная валюта «${text(r[col.currency])}» — нужна RUB, USD, EUR или BTC`)
       continue
     }
-    const form = FORM_BY_LABEL[text(r[col.form]).toLowerCase()]
+    const form = lookup(FORM_BY_LABEL, text(r[col.form]).toLowerCase())
     if (!form) {
       issue(`У места «${name}» неизвестная форма «${text(r[col.form])}» — нужна нал, безнал или —`)
       continue
     }
     places.push({ name, category, currency, form })
   }
-  return places
+  return { places, knownNames: seen }
 }
 
-function parseSnapshots(data: Cell[][], places: ImportPlace[], issues: ImportIssue[]): ImportSnapshot[] {
+function parseSnapshots(
+  data: Cell[][],
+  { places, knownNames }: ParsedPlaces,
+  issues: ImportIssue[],
+): ImportSnapshot[] {
   const headerIndex = data.findIndex((r) => text(r[0]) === DATE)
   if (headerIndex < 0) {
     issues.push({
@@ -137,11 +152,19 @@ function parseSnapshots(data: Cell[][], places: ImportPlace[], issues: ImportIss
     return []
   }
   const head = data[headerIndex].map(text)
+  const headerRow = headerIndex + 1
   const missing = FIXED_COLUMNS.filter((h) => !head.includes(h))
   if (missing.length > 0) {
-    issues.push({ sheet: SNAPSHOTS, row: headerIndex + 1, message: `Нет колонок: ${missing.join(', ')}` })
-    return []
+    issues.push({ sheet: SNAPSHOTS, row: headerRow, message: `Нет колонок: ${missing.join(', ')}` })
   }
+  // A repeated header would make "which column?" a silent guess.
+  const counts = new Map<string, number>()
+  for (const h of head) if (h) counts.set(h, (counts.get(h) ?? 0) + 1)
+  const duplicated = [...counts].filter(([, n]) => n > 1).map(([h]) => h)
+  for (const h of duplicated) {
+    issues.push({ sheet: SNAPSHOTS, row: headerRow, message: `Колонка «${h}» встречается дважды` })
+  }
+  if (missing.length > 0 || duplicated.length > 0) return []
   const col = (h: string) => head.indexOf(h)
 
   const currencyOf = new Map(places.map((p) => [p.name, p.currency]))
@@ -149,10 +172,10 @@ function parseSnapshots(data: Cell[][], places: ImportPlace[], issues: ImportIss
   head.forEach((h, index) => {
     if (!h || FIXED_COLUMNS.includes(h)) return
     if (currencyOf.has(h)) placeColumns.push({ name: h, index })
-    else
+    else if (!knownNames.has(h))
       issues.push({
         sheet: SNAPSHOTS,
-        row: headerIndex + 1,
+        row: headerRow,
         message: `Колонка «${h}» — такого места нет на листе «Места»`,
       })
   })
@@ -166,7 +189,7 @@ function parseSnapshots(data: Cell[][], places: ImportPlace[], issues: ImportIss
     const issue = (message: string) => issues.push({ sheet: SNAPSHOTS, row, message })
 
     const date = r[col(DATE)]
-    if (!(date instanceof Date)) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
       issue(`В колонке «Дата» не дата: «${text(date)}»`)
       continue
     }
@@ -211,9 +234,14 @@ function parseSnapshots(data: Cell[][], places: ImportPlace[], issues: ImportIss
     }
 
     const totalCell = r[col(TOTAL)]
+    // Required: read-excel-file turns Excel error cells (#REF!, #N/A) into empty ones, so an
+    // optional total would let a broken formula pass as a silent zero.
     let reportedTotalRub: number | null = null
     if (typeof totalCell === 'number') reportedTotalRub = totalCell
-    else if (!isBlank(totalCell)) {
+    else if (isBlank(totalCell)) {
+      issue(`Пустой «${TOTAL}» — нужен итог из вашего Excel (ошибка формулы в Excel тоже читается как пустая ячейка)`)
+      broken = true
+    } else {
       issue(`«${TOTAL}» не число: «${text(totalCell)}»`)
       broken = true
     }
@@ -233,7 +261,7 @@ export function parseWorkbook(sheets: RawSheet[]): ParsedWorkbook {
   }
   if (!placesSheet || !snapshotsSheet) return { places: [], snapshots: [], issues }
 
-  const places = parsePlaces(placesSheet.data, issues)
-  const snapshots = parseSnapshots(snapshotsSheet.data, places, issues)
-  return { places, snapshots, issues }
+  const parsedPlaces = parsePlaces(placesSheet.data, issues)
+  const snapshots = parseSnapshots(snapshotsSheet.data, parsedPlaces, issues)
+  return { places: parsedPlaces.places, snapshots, issues }
 }

@@ -50,13 +50,6 @@ describe('parseWorkbook leniency', () => {
     expect(parsed.snapshots[0].amounts).toEqual({ Сбер: 1000, Тезер: 0 })
     expect(parsed.snapshots[0].rates.eurUsd).toBeNull()
   })
-
-  it('keeps an empty Excel total as null', () => {
-    const parsed = parseWorkbook(
-      book([['Сбер', 'Банки', 'RUB', 'безнал']], [...SNAP_HEAD, 'Сбер'], [[d('2025-01-31'), 100, 1.1, 90000, null, 5]]),
-    )
-    expect(parsed.snapshots[0].reportedTotalRub).toBeNull()
-  })
 })
 
 describe('parseWorkbook format errors', () => {
@@ -129,6 +122,52 @@ describe('parseWorkbook format errors', () => {
       'Место «Сбер»: не число «много»',
       'Есть суммы в EUR, но не заполнен курс EUR/USD',
     ])
+  })
+
+  it('blocks a row with an empty total, since an Excel error cell is read as empty', () => {
+    const parsed = parseWorkbook(book([place], [...SNAP_HEAD, 'Сбер'], [row({ 4: null })]))
+    expect(parsed.issues.map((i) => i.message)).toEqual([
+      'Пустой «Итог ₽» — нужен итог из вашего Excel (ошибка формулы в Excel тоже читается как пустая ячейка)',
+    ])
+    expect(parsed.issues[0]).toMatchObject({ sheet: 'Срезы', row: 4 })
+    expect(parsed.snapshots).toEqual([])
+  })
+
+  it('reports a duplicated header column once, with the header row', () => {
+    const parsed = parseWorkbook(book([place], [...SNAP_HEAD, 'Сбер', 'Сбер'], [[...row(), 1, 1]]))
+    expect(parsed.issues).toEqual([{ sheet: 'Срезы', row: 3, message: 'Колонка «Сбер» встречается дважды' }])
+  })
+
+  it('reports a duplicated fixed column', () => {
+    expect(messages(book([place], [...SNAP_HEAD, 'USDT/RUB', 'Сбер'], []))).toEqual([
+      'Колонка «USDT/RUB» встречается дважды',
+    ])
+  })
+
+  it('explains a place that failed validation on Места only once', () => {
+    expect(messages(book([['Касса', 'Наличные', 'GBP', 'нал']], [...SNAP_HEAD, 'Касса'], [row()]))).toEqual([
+      'У места «Касса» неизвестная валюта «GBP» — нужна RUB, USD, EUR или BTC',
+    ])
+  })
+
+  it('does not take Object.prototype keys for a form', () => {
+    expect(messages(book([['Сейф', 'Наличные', 'RUB', 'constructor']], [...SNAP_HEAD], []))).toEqual([
+      'У места «Сейф» неизвестная форма «constructor» — нужна нал, безнал или —',
+    ])
+  })
+
+  it('treats an invalid Date as a non-date instead of throwing', () => {
+    expect(messages(book([place], [...SNAP_HEAD, 'Сбер'], [row({ 0: new Date('nope') })]))).toEqual([
+      'В колонке «Дата» не дата: «Invalid Date»',
+    ])
+  })
+
+  it('reports a missing column on Места', () => {
+    const sheets: RawSheet[] = [
+      { sheet: 'Места', data: [['Место', 'Категория', 'Валюта'], place] },
+      { sheet: 'Срезы', data: [SNAP_HEAD] },
+    ]
+    expect(messages(sheets)).toEqual(['Нет колонок: Форма'])
   })
 
   it('numbers issues by the Excel row', () => {
