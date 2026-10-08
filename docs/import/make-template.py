@@ -21,7 +21,7 @@ INPUT_FILL = PatternFill("solid", fgColor="FFF2CC")
 thin = Side(style="thin", color="BFBFBF")
 BOX = Border(bottom=thin)
 
-LAST_COL = "AZ"  # place columns F..AZ — room for ~47 places
+LAST_COL = "DZ"  # place columns F..DZ — room for ~120 places, closed ones included
 
 places = [
     # name, category, currency, form
@@ -70,7 +70,8 @@ lines = [
     ("   EUR/USD — курс евро к доллару (ЕЦБ). Евро в рубли идёт через доллар: EUR/USD × USDT/RUB.", BLACK),
     ("   BTC/USD — цена биткоина в долларах.", BLACK),
     ("   Итог ₽ — итог по вашему Excel. Приложение посчитает свой и покажет строки, где они разошлись.", BLACK),
-    ("   Дальше — колонки мест, сколько угодно, в валюте места. Новое место — новая колонка справа", BLACK),
+    ("В «Итог ₽» — число из вашей главной вкладки (Специальная вставка → Значения) или ссылка на её итог. Формулу шаблона не оставляйте: иначе приложение сверит само себя и любая ошибка переноса покажет «сошлось».", BOLD),
+    ("   Дальше — колонки мест (до ~120, закрытые тоже считаются), в валюте места. Новое место — новая колонка справа", BLACK),
     ("   плюс строка на листе «Места». Место закрылось — ставьте 0, колонку не удаляйте.", BLACK),
     ("", None),
     ("Строка 2 на «Срезах» серая — она считается сама и показывает валюту колонки.", BLACK),
@@ -130,8 +131,8 @@ for j, h in enumerate(headers, start=1):
     c.font, c.fill, c.border = BOLD, HDR_FILL, BOX
     c.alignment = Alignment(horizontal="center", wrap_text=True)
 sn["E3"].comment = Comment(
-    "В шаблоне — формула для образца. В вашем файле здесь итог, "
-    "который считает ваш Excel: приложение сверит с ним свой.", "quietfault")
+    "В шаблоне здесь формула для образца. В вашем файле нужно число из вашей главной вкладки "
+    "(значения или ссылка на её итог), а не эта формула: иначе приложение сверит само себя.", "quietfault")
 
 rng = f"$F$2:${LAST_COL}$2"
 for i, (d, usdt, eur, btc, amounts) in enumerate(rows, start=4):
